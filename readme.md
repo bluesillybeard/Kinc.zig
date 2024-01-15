@@ -32,6 +32,10 @@ export fn kickstart(argc: c_int, argv: [*c][*c]const u8) callconv(.C) c_int {
 
 Currently tested with zig 0.12.0-dev.2127+fcc0c5ddc
 
+How it works:
+1. Call Kinc's make system to get JSON data of how to build it
+2. use that information to add include directories, link system libraries, and add C sources to add Kinc.
+
 TODO:
 - actual bindings instead of just linking it
     - This is extra important because Kinc has an aggrivatingly traditional C api that makes me want to puke
