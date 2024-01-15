@@ -13,12 +13,12 @@ In your build.zig:
 kinc = @import("Kinc.zig/build.zig");
 
 // after you've created your exe or whatever
-kinc.link("Kinc.zig", exe);
+kinc.link("Kinc.zig/Kinc", exe);
 ```
 that will statically link kinc into your project, and it adds kinc's include paths as well.
 
-Note: Kinc creates its own Main method so it can initialize things before the user's program begins.
-That means you can't use the regular Zig entrypoint system, you need to define this for your entry point:
+Kinc creates its own Main method so it can initialize things before the user's program begins.
+That means you can't use the regular Zig entrypoint, you need to do this instead:
 ```
 // Tell zig to find main elsewhere
 pub extern fn main(argc: c_int, argv: [*c][*c]const u8) callconv(.C) c_int;
