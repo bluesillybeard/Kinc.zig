@@ -85,7 +85,11 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile) !void {
 
     // TODO: look into whether it would be worth adding the option to link libraries statically.
     for(buildInfo.libraries) |library| {
-        c.linkSystemLibrary(library);
+        c.linkSystemLibrary2(library, .{
+            .needed = true,
+            // pkg-config doesn't know what to do with some of the libs 
+            .use_pkg_config = .no,
+        });
     }
 
     for(buildInfo.includes) |include| {

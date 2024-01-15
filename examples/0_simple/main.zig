@@ -41,7 +41,7 @@ export fn kickstart(argc: c_int, argv: [*c][*c]const u8) callconv(.C) c_int {
     _ = argc;
     _ = argv;
 
-    _ = c.kinc_init("Shader", 1-24, 768, null, null);
+    _ = c.kinc_init("Shader", 1024, 768, null, null);
     c.kinc_set_update_callback(&update, null);
     // In the original test, the shaders are loaded in a separate function
     // and the "allocator" is a buffer allocator to a chunk of memory.
