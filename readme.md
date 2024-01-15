@@ -38,5 +38,4 @@ How it works:
 
 TODO:
 - actual bindings instead of just linking it
-    - This is extra important because Kinc has an aggrivatingly traditional C api that makes me want to puke
 - return a module (or whatever that ends up being called in the future) instead of adding the files to a given compile step.
