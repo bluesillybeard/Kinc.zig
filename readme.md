@@ -20,9 +20,17 @@ that will statically link kinc into your project, and it adds kinc's include pat
 Note: Kinc creates its own Main method so it can initialize things before the user's program begins.
 That means you can't use the regular Zig entrypoint system, you need to define this for your entry point:
 ```
-export fn kickstart(c_int argc, [*c][*c]const u8 argv) c_int {}
+// Tell zig to find main elsewhere
+pub extern fn main(argc: c_int, argv: [*c][*c]const u8) callconv(.C) c_int;
+
+// Export so the LLVM linker can find it (instead of it accidentally being linked before LLVM can find it)
+export fn kickstart(argc: c_int, argv: [*c][*c]const u8) callconv(.C) c_int {
+    // code goes here
+    return 0; //return non-zero on error
+}
 ```
 
+Currently tested with zig 0.12.0-dev.2127+fcc0c5ddc
 
 TODO:
 - actual bindings instead of just linking it
