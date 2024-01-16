@@ -46,9 +46,9 @@ export fn kickstart(argc: c_int, argv: [*c][*c]const u8) callconv(.C) c_int {
     // In the original test, the shaders are loaded in a separate function
     // and the "allocator" is a buffer allocator to a chunk of memory.
     // Instead, the @embedFile builtin is used, which eliminates the need to allocate memory or load a file at runtime.
-    const vertexShaderCode = @embedFile("shader.frag.glsl");
+    const vertexShaderCode = @embedFile("shaderOut/shader.frag");
     c.kinc_g4_shader_init(&vertex_shader, vertexShaderCode.ptr, vertexShaderCode.len, c.KINC_G4_SHADER_TYPE_VERTEX);
-    const fragmentShaderCode = @embedFile("shader.frag.glsl");
+    const fragmentShaderCode = @embedFile("shaderOut/shader.frag");
     c.kinc_g4_shader_init(&fragment_shader, fragmentShaderCode.ptr, fragmentShaderCode.len, c.KINC_G4_SHADER_TYPE_FRAGMENT);
 
 

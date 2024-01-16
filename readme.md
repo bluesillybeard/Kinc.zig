@@ -23,7 +23,7 @@ That means you can't use the regular Zig entrypoint, you need to do this instead
 // Tell zig to find main elsewhere
 pub extern fn main(argc: c_int, argv: [*c][*c]const u8) callconv(.C) c_int;
 
-// Export so the LLVM linker can find it (instead of it accidentally being linked before LLVM can find it)
+// Export so the linker can find it (instead of it accidentally being linked in the compiler or something)
 export fn kickstart(argc: c_int, argv: [*c][*c]const u8) callconv(.C) c_int {
     // code goes here
     return 0; //return non-zero on error

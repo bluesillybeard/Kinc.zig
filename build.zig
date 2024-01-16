@@ -1,9 +1,11 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     // TODO: put examples in a list
+    // List will need shaders too
     const exe = b.addExecutable(.{
         .name = "example",
         .target = target,
@@ -12,9 +14,75 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = .{.path = "examples/0_simple/main.zig"},
     });
     try link("Kinc", exe);
+    try compileShader("Kinc", exe, "examples/0_simple/shader.frag.glsl", "examples/0_simple/shaderOut/shader.frag");
+    try compileShader("Kinc", exe, "examples/0_simple/shader.vert.glsl", "examples/0_simple/shaderOut/shader.vert");
     b.installArtifact(exe);
-    const runStep = b.addRunArtifact(exe);
-    runStep.step.dependOn(&exe.step);
+    const runArtifact = b.addRunArtifact(exe);
+    runArtifact.step.dependOn(&exe.step);
+    const runStep = b.step("run", "Run example 0");
+    runStep.dependOn(&runArtifact.step);
+}
+
+/// Only accepts GLSL shaders for now.
+/// sourceFile and destinationFile are relative paths from your build.zig
+/// The shader is compiled immediately upon calling this function, so you can expect it to be available for @embedFile or other build commands.
+/// This function should be called after calling link.
+pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile, sourceFile: []const u8, destinationFile: []const u8) !void {
+    const allocator = c.root_module.owner.allocator;
+    // make paths absolute
+    const cwdPath = try std.fs.cwd().realpathAlloc(allocator, "./");
+    const sourceFileAbsolute = try std.fmt.allocPrint(allocator, "{s}/{s}", .{cwdPath, sourceFile});
+    const destinationPath = destinationFile[0 .. std.mem.lastIndexOfAny(u8, destinationFile, "/\\") orelse 0];
+    // create the destination folder if it doesn't already exist
+    std.fs.cwd().makePath(destinationPath) catch |e| if(e != error.PathAlreadyExists) return e;
+    const destinationFileAbsolute = try std.fmt.allocPrint(allocator, "{s}/{s}", .{cwdPath, destinationFile});
+    const modulePathAbsolute = try std.fmt.allocPrint(allocator, "{s}/{s}", .{cwdPath, modulePath});
+    // Figure out which krafix to use
+    const krafixPath = switch (builtin.os.tag) {
+        .linux => switch (builtin.cpu.arch) {
+            .x86_64 => try std.fmt.allocPrint(allocator, "{s}/Tools/linux_x64/krafix", .{modulePathAbsolute}),
+            .arm => try std.fmt.allocPrint(allocator, "{s}/Tools/linux_arm/krafix", .{modulePathAbsolute}),
+            .aarch64 => try std.fmt.allocPrint(allocator, "{s}/Tools/linux_arm64/krafix", .{modulePathAbsolute}),
+            else => @panic("unsupported host arch"),
+        },
+        .freebsd => switch (builtin.cpu.arch) {
+            .x86_64 => try std.fmt.allocPrint(allocator, "{s}/Tools/freebsd_x64/krafix", .{modulePathAbsolute}),
+            else => @panic("unsupported host arch"),
+        },
+        .macos => switch (builtin.cpu.arch) {
+            // TODO: make sure this is actually x86 instead of being arm
+            .x86_64 => try std.fmt.allocPrint(allocator, "{s}/Tools/macos/krafix", .{modulePathAbsolute}),
+            // TODO: consider using rosetta on arm64 (or just running it of macos supports just running it)
+            else => @panic("unsupported host arch"),
+        }, 
+        .windows => switch (builtin.cpu.arch) {
+            .x86_64 => try std.fmt.allocPrint(allocator, "{s}/Tools/windows_x64/krafix", .{modulePathAbsolute}),
+            else => @panic("unsupported host arch"),
+        },
+        else => @panic("unsupported host OS"),
+    };
+
+    // Figure out what shader type to compile to
+    // TODO: actually do this instead of assuming Vulkan
+    const shaderOutputType = "spirv";
+
+    // the build directory for Kinc.
+    const buildDir = try std.fmt.allocPrint(allocator, "{s}/Build", .{modulePathAbsolute});
+    // build arguments for krafix
+    std.debug.print("{s}", .{krafixPath});
+    const args = [_][]const u8{
+        krafixPath,
+        shaderOutputType,
+        sourceFileAbsolute,
+        destinationFileAbsolute,
+        buildDir,
+        // TODO: figure target platform instead of assuing linux
+        "linux",
+    };
+    var child = std.process.Child.init(&args, allocator);
+    child.cwd = modulePathAbsolute;
+    // TODO: verify it ran successfully
+    _ = try child.spawnAndWait();
 }
 
 // Link Kinc to a compile step & and kinc's include directory
