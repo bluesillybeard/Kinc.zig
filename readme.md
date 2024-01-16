@@ -30,7 +30,9 @@ export fn kickstart(argc: c_int, argv: [*c][*c]const u8) callconv(.C) c_int {
 }
 ```
 
-Currently tested with zig 0.12.0-dev.2127+fcc0c5ddc
+Compile time depencies:
+- Zig (version 0.12.0-dev.2127+fcc0c5ddc) or compatible
+
 
 How it works:
 1. Call Kinc's make system to get JSON data of how to build it
@@ -39,3 +41,4 @@ How it works:
 TODO:
 - actual bindings instead of just linking it
 - return a module (or whatever that ends up being called in the future) instead of adding the files to a given compile step.
+    - Better to do this after bindings are created

@@ -93,10 +93,7 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile) !void {
     }
 
     for(buildInfo.includes) |include| {
-        //try flags.append("-I");
         const path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{modulePathAbsolute, include});
-        //try flags.append(path);
-        // Because the application needs to have the includes as well, those are sent to c as well
         c.addIncludePath(.{.path = path});
     }
     var files = try std.ArrayList([]const u8).initCapacity(allocator, buildInfo.files.len);
