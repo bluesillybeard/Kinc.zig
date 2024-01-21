@@ -69,7 +69,7 @@ pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile
     // the build directory for Kinc.
     const buildDir = try std.fmt.allocPrint(allocator, "{s}/Build", .{modulePathAbsolute});
     // build arguments for krafix
-    std.debug.print("{s}", .{krafixPath});
+    std.debug.print("{s}\n", .{krafixPath});
     const args = [_][]const u8{
         krafixPath,
         shaderOutputType,
@@ -79,6 +79,7 @@ pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile
         // TODO: figure target platform instead of assuing linux
         "linux",
     };
+    std.debug.print("Krafix arguments: {s}\n", .{args});
     var child = std.process.Child.init(&args, allocator);
     child.cwd = modulePathAbsolute;
     // TODO: verify it ran successfully
