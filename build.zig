@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     // TODO: take in options as parameters
-    const options = KmakeOptions {
+    const options = KmakeOptions{
         .platform = .guess,
     };
     // TODO: put examples in a list
@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
         .link_libc = true,
-        .root_source_file = .{.path = "examples/0_simple/main.zig"},
+        .root_source_file = .{ .path = "examples/0_simple/main.zig" },
     });
     try link("Kinc", exe, options);
     try compileShader("Kinc", exe, "examples/0_simple/shader.frag.glsl", "examples/0_simple/shaderOut/shader.frag", options);
@@ -35,12 +35,12 @@ pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile
     const allocator = c.root_module.owner.allocator;
     // make paths absolute
     const cwdPath = try std.fs.cwd().realpathAlloc(allocator, "./");
-    const sourceFileAbsolute = try std.fmt.allocPrint(allocator, "{s}/{s}", .{cwdPath, sourceFile});
+    const sourceFileAbsolute = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ cwdPath, sourceFile });
     const destinationPath = destinationFile[0 .. std.mem.lastIndexOfAny(u8, destinationFile, "/\\") orelse 0];
     // create the destination folder if it doesn't already exist
-    std.fs.cwd().makePath(destinationPath) catch |e| if(e != error.PathAlreadyExists) return e;
-    const destinationFileAbsolute = try std.fmt.allocPrint(allocator, "{s}/{s}", .{cwdPath, destinationFile});
-    const modulePathAbsolute = try std.fmt.allocPrint(allocator, "{s}/{s}", .{cwdPath, modulePath});
+    std.fs.cwd().makePath(destinationPath) catch |e| if (e != error.PathAlreadyExists) return e;
+    const destinationFileAbsolute = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ cwdPath, destinationFile });
+    const modulePathAbsolute = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ cwdPath, modulePath });
     // Figure out which krafix to use
     const krafixPath = switch (builtin.os.tag) {
         .linux => switch (builtin.cpu.arch) {
@@ -58,7 +58,7 @@ pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile
             .x86_64 => try std.fmt.allocPrint(allocator, "{s}/Tools/macos/krafix", .{modulePathAbsolute}),
             // TODO: consider using rosetta on arm64 (or just running it of macos supports just running it)
             else => @panic("unsupported host arch"),
-        }, 
+        },
         .windows => switch (builtin.cpu.arch) {
             .x86_64 => try std.fmt.allocPrint(allocator, "{s}/Tools/windows_x64/krafix", .{modulePathAbsolute}),
             else => @panic("unsupported host arch"),
@@ -95,30 +95,43 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
     const modulePathAbsolute = try std.fs.cwd().realpathAlloc(allocator, modulePath);
     // set up Kinc
     // TODO: run the bat on Windows
-    
+
     defer allocator.free(modulePathAbsolute);
     {
-        var child = std.process.Child.init(&[_][]const u8{"bash", "get_dlc"}, allocator);
+        var child = blk: {
+            if (builtin.os.tag == .windows) {
+                break :blk std.process.Child.init(&[_][]const u8{"get_dlc"}, allocator);
+            } else {
+                // TODO: see if the Windows code works on Posix as well. (skipping the bash argument and going straight to running the file)
+                break :blk std.process.Child.init(&[_][]const u8{ "bash", "get_dlc" }, allocator);
+            }
+        };
+
         child.cwd = modulePathAbsolute;
-        _ = try child.spawnAndWait();
-        // TODO: make sure it exited successfuly
+        const res = try child.spawnAndWait();
+        if (res != .Exited or res.Exited != 0) {
+            std.debug.print("get_dlc failed! {any}\n", .{res});
+        }
     }
     // Call Kinc's build system to get information on how to build it.
-    // TODO: run the bat on Windows
     const buildInfoJson = blk: {
         var args = try std.ArrayList([]const u8).initCapacity(c.root_module.owner.allocator, 20);
-        // TODO: run the bat on windows
-        try args.append("bash");
-        try args.append("make");
+        if (builtin.os.tag == .windows) {
+            try args.append("make");
+        } else {
+            // TODO: see if bash is nessisary on posix systems
+            try args.append("bash");
+            try args.append("make");
+        }
         try args.append("--json");
         // // Tell it to use the clang compiler, in case there are compiler-specific defines or something
-        // try args.append("--compiler");
-        // try args.append("clang");
+        try args.append("--compiler");
+        try args.append("clang");
         try args.append("--target");
         try args.append(getKmakeTargetString(c.rootModuleTarget(), options.platform));
         try args.append("--arch");
         try args.append(getKmakeArchitectureString(c.rootModuleTarget()));
-        if(c.root_module.optimize == null or c.root_module.optimize.? == .Debug){
+        if (c.root_module.optimize == null or c.root_module.optimize.? == .Debug) {
             try args.append("--debug");
         }
         // TODO: graphics and audio options
@@ -136,10 +149,10 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
         defer stderr.deinit();
         try child.spawn();
         try child.collectOutput(&stdout, &stderr, std.math.maxInt(usize));
-        _ = try child.wait();
+        const res = try child.wait();
         // TODO: make sure it exited successfuly
-        
-        if(stderr.items.len > 0){
+        if (res != .Exited or res.Exited != 0) {
+            std.debug.print("get_dlc failed! {any}\n", .{res});
             std.debug.print("{s}\n", .{stdout.items});
             std.debug.print("{s}\n", .{stderr.items});
         }
@@ -151,47 +164,42 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
     // print the JSON it returned
     try std.io.getStdOut().writer().print("{s}\n", .{buildInfoJson});
     // parse the json it returned
-    const buildInfoParsed = try std.json.parseFromSlice(
-        BuildInfo,allocator, buildInfoJson,
-        .{
-            .allocate = .alloc_always,
-            .duplicate_field_behavior = .@"error",
-            .ignore_unknown_fields = true,
-            .max_value_len = null,
-        }
-    );
+    const buildInfoParsed = try std.json.parseFromSlice(BuildInfo, allocator, buildInfoJson, .{
+        .allocate = .alloc_always,
+        .duplicate_field_behavior = .@"error",
+        .ignore_unknown_fields = true,
+        .max_value_len = null,
+    });
     defer buildInfoParsed.deinit();
     const buildInfo = buildInfoParsed.value;
 
     // Buid the flags for the compilation into c
-    var flags = try std.ArrayList([]const u8).initCapacity(allocator, 
-    buildInfo.includes.len * 2 + buildInfo.libraries.len * 2 + buildInfo.defines.len * 2);
+    var flags = try std.ArrayList([]const u8).initCapacity(allocator, buildInfo.includes.len * 2 + buildInfo.libraries.len * 2 + buildInfo.defines.len * 2);
     defer flags.deinit();
 
-    for(buildInfo.defines) |define| {
+    for (buildInfo.defines) |define| {
         try flags.append("-D");
         try flags.append(define);
     }
 
     // TODO: look into whether it would be worth adding the option to link libraries statically.
-    for(buildInfo.libraries) |library| {
+    for (buildInfo.libraries) |library| {
         c.linkSystemLibrary2(library, .{
             .needed = true,
-            // pkg-config doesn't know what to do with some of the libs 
+            // pkg-config doesn't know what to do with some of the libs
             .use_pkg_config = .no,
         });
     }
 
-    for(buildInfo.includes) |include| {
-        const path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{modulePathAbsolute, include});
-        c.addIncludePath(.{.path = path});
+    for (buildInfo.includes) |include| {
+        const path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ modulePathAbsolute, include });
+        c.addIncludePath(.{ .path = path });
     }
     var files = try std.ArrayList([]const u8).initCapacity(allocator, buildInfo.files.len);
     defer files.deinit();
-    for(buildInfo.files) |file| {
+    for (buildInfo.files) |file| {
         // filter out files we don't care about
-        if(std.mem.endsWith(u8, file, ".c")
-        or std.mem.endsWith(u8, file, ".cpp")) {
+        if (std.mem.endsWith(u8, file, ".c") or std.mem.endsWith(u8, file, ".cpp")) {
             // The files are relative to Kinc, not Kinc.zig so add that part of the path
             try files.append(try std.fmt.allocPrint(allocator, "Kinc/{s}", .{file}));
         }
@@ -230,10 +238,10 @@ fn guessKmakeTargetStringFromTarget(target: std.Target) []const u8 {
 }
 
 fn getKmakeTargetString(target: std.Target, platform: KmakePlatform) []const u8 {
-    if(platform == .guess) return guessKmakeTargetStringFromTarget(target);
+    if (platform == .guess) return guessKmakeTargetStringFromTarget(target);
     // Note that whether the architecture is supported on that platform is not checked,
     // instead let Kmake do that.
-    
+
     // The KmakePlatform enum's names are the same as the string values
     // So we can just get the enum name
     return @tagName(platform);
@@ -252,7 +260,6 @@ fn getKmakeArchitectureString(target: std.Target) []const u8 {
 
 pub const KmakeOptions = struct {
     platform: KmakePlatform,
-
 };
 
 pub const KmakePlatform = enum {

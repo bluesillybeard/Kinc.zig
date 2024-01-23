@@ -6,9 +6,8 @@ Right now there are no bindings; this simply provides an easier way to link Kinc
 
 Supported platforms:
 - Linux (compiled from Linux)
-- Windows (compiled from Windows)
 
-I am working on getting cross-compilation working, but that is a dificult problem when there are so many platform-specific dependencies to wrangle.
+I am fruitlessly trying to get Windows builds to work, but Windows is just inherently a difficult platform to work with. On Linux, it "just works", but the windows build just refuses to work.
 
 1. Add this as a submodule
     - `git submodule add https://github.com/bluesillybeard/Kinc.zig.git`
