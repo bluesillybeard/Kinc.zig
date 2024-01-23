@@ -4,6 +4,10 @@ const builtin = @import("builtin");
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    // TODO: take in options as parameters
+    const options = KmakeOptions {
+        .platform = .guess,
+    };
     // TODO: put examples in a list
     // List will need shaders too
     const exe = b.addExecutable(.{
@@ -13,9 +17,9 @@ pub fn build(b: *std.Build) !void {
         .link_libc = true,
         .root_source_file = .{.path = "examples/0_simple/main.zig"},
     });
-    try link("Kinc", exe);
-    try compileShader("Kinc", exe, "examples/0_simple/shader.frag.glsl", "examples/0_simple/shaderOut/shader.frag");
-    try compileShader("Kinc", exe, "examples/0_simple/shader.vert.glsl", "examples/0_simple/shaderOut/shader.vert");
+    try link("Kinc", exe, options);
+    try compileShader("Kinc", exe, "examples/0_simple/shader.frag.glsl", "examples/0_simple/shaderOut/shader.frag", options);
+    try compileShader("Kinc", exe, "examples/0_simple/shader.vert.glsl", "examples/0_simple/shaderOut/shader.vert", options);
     b.installArtifact(exe);
     const runArtifact = b.addRunArtifact(exe);
     runArtifact.step.dependOn(&exe.step);
@@ -26,8 +30,8 @@ pub fn build(b: *std.Build) !void {
 /// Only accepts GLSL shaders for now.
 /// sourceFile and destinationFile are relative paths from your build.zig
 /// The shader is compiled immediately upon calling this function, so you can expect it to be available for @embedFile or other build commands.
-/// This function should be called after calling link.
-pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile, sourceFile: []const u8, destinationFile: []const u8) !void {
+/// This function should be called after calling link, with the exact same options.
+pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile, sourceFile: []const u8, destinationFile: []const u8, options: KmakeOptions) !void {
     const allocator = c.root_module.owner.allocator;
     // make paths absolute
     const cwdPath = try std.fs.cwd().realpathAlloc(allocator, "./");
@@ -76,8 +80,7 @@ pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile
         sourceFileAbsolute,
         destinationFileAbsolute,
         buildDir,
-        // TODO: figure target platform instead of assuing linux
-        "linux",
+        getKmakeTargetString(c.rootModuleTarget(), options.platform),
     };
     std.debug.print("Krafix arguments: {s}\n", .{args});
     var child = std.process.Child.init(&args, allocator);
@@ -87,7 +90,7 @@ pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile
 }
 
 // Link Kinc to a compile step & and kinc's include directory
-pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile) !void {
+pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options: KmakeOptions) !void {
     const allocator = c.root_module.owner.allocator;
     const modulePathAbsolute = try std.fs.cwd().realpathAlloc(allocator, modulePath);
     // set up Kinc
@@ -101,11 +104,29 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile) !void {
         // TODO: make sure it exited successfuly
     }
     // Call Kinc's build system to get information on how to build it.
-    // TODO: forward target and optimize info
-    // TODO: create a struct to place arguments for Kinc (such as specifying the graphics backend or which features to enable)
     // TODO: run the bat on Windows
     const buildInfoJson = blk: {
-        var child = std.process.Child.init(&[_][]const u8{"bash", "make", "--json"}, allocator);
+        var args = try std.ArrayList([]const u8).initCapacity(c.root_module.owner.allocator, 20);
+        // TODO: run the bat on windows
+        try args.append("bash");
+        try args.append("make");
+        try args.append("--json");
+        // // Tell it to use the clang compiler, in case there are compiler-specific defines or something
+        // try args.append("--compiler");
+        // try args.append("clang");
+        try args.append("--target");
+        try args.append(getKmakeTargetString(c.rootModuleTarget(), options.platform));
+        try args.append("--arch");
+        try args.append(getKmakeArchitectureString(c.rootModuleTarget()));
+        if(c.root_module.optimize == null or c.root_module.optimize.? == .Debug){
+            try args.append("--debug");
+        }
+        // TODO: graphics and audio options
+        // For now, only vulkan is allowed to be used
+        try args.append("--graphics");
+        try args.append("vulkan");
+        std.debug.print("Kmake options: {s}\n", .{args.items});
+        var child = std.process.Child.init(try args.toOwnedSlice(), allocator);
         child.cwd = modulePathAbsolute;
         child.stdout_behavior = .Pipe;
         child.stderr_behavior = .Pipe;
@@ -187,4 +208,74 @@ pub const BuildInfo = struct {
     libraries: []const []const u8,
     defines: []const []const u8,
     files: []const []const u8,
+};
+
+fn guessKmakeTargetStringFromTarget(target: std.Target) []const u8 {
+    // TODO: switch on compatible platforms too
+    // For example, most BSDs are compatible with linux binaries
+    return switch (target.os.tag) {
+        .windows => "windows",
+        .ios => "ios",
+        .macos => "osx",
+        .linux => "linux",
+        .emscripten => "emscripten",
+        .tvos => "tvos",
+        .ps4 => "ps4",
+        .ps5 => "ps5",
+        .freebsd => "freebsd",
+        // TODO: verify that Zig Wasi is compatible with Kmake WASM
+        .wasi => "wasm",
+        else => @panic("Unsupported target"),
+    };
+}
+
+fn getKmakeTargetString(target: std.Target, platform: KmakePlatform) []const u8 {
+    if(platform == .guess) return guessKmakeTargetStringFromTarget(target);
+    // Note that whether the architecture is supported on that platform is not checked,
+    // instead let Kmake do that.
+    
+    // The KmakePlatform enum's names are the same as the string values
+    // So we can just get the enum name
+    return @tagName(platform);
+}
+fn getKmakeArchitectureString(target: std.Target) []const u8 {
+    return switch (target.cpu.arch) {
+        .x86 => "x86",
+        .x86_64 => "x86_64",
+        .aarch64 => blk: {
+            //TODO: differentiate between arm7 and arm8
+            break :blk "arm7";
+        },
+        else => @panic("unsupported target architecture"),
+    };
+}
+
+pub const KmakeOptions = struct {
+    platform: KmakePlatform,
+
+};
+
+pub const KmakePlatform = enum {
+    // TODO: go beyond Zig target and see if there are any CPU feature limitations or guarantees for each platform.
+    // For example, the PS5's processor might support extensions that zig does not enable by default,
+    // Or the XBox one might have a CPU that is too old to be supported by Zig's default code generation, so CPU features have to be explicitly disabled
+    ///Try to guess using the Zig target. Note that this will generally assume Vulkan / DirectX support, and it will generally assume PC rather than mobile.
+    guess,
+    windows, //windows
+    windowsapp, //windows
+    ios, // ios
+    osx, //macos
+    android, //linux?
+    linux, //linux
+    emscripten, //emscripten
+    tizen, //linux
+    pi, //linux
+    tvos, //tvos
+    ps4, //ps4
+    xboxone, //windows
+    @"switch", //linux?
+    xboxscarlett, //windows
+    ps5, //ps5
+    freebsd, //freebsd
+    wasm, //wasi?
 };
