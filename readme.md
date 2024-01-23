@@ -4,7 +4,11 @@ Kinc for Zig.
 
 Right now there are no bindings; this simply provides an easier way to link Kinc with your project.
 
-Also, right now this library only works when compiling from linux, to linux, on a computer with Vulkan support, because I literally created this library days ago. I am a busy person who does not have a ton of free time, so things will be a bit slow for now.
+Supported platforms:
+- Linux (compiled from Linux)
+- Windows (compiled from Windows)
+
+I am working on getting cross-compilation working, but that is a dificult problem when there are so many platform-specific dependencies to wrangle.
 
 1. Add this as a submodule
     - `git submodule add https://github.com/bluesillybeard/Kinc.zig.git`
@@ -61,3 +65,13 @@ TODO:
 - actual bindings instead of just linking it
 - return a module (or whatever that ends up being called in the future) instead of adding the files to a given compile step.
     - Better to do this after bindings are created
+- test building on Windows
+    - test cross-compilation to Linux. It should work, since X11 libs are linked using libdl instead of as part of the ELF.
+        - asound and udev might cause issues if they aren't part of Zig's cross-compile toolkit
+        - Look into if libdl is really required, since it should be part of glibc now
+- get cross-compilation from Linux to Windows working
+    - dxguid is missing
+    - winhttp is missing
+    - strmiids is missing
+    - wbemuuid is missing
+    - It might be possible to fix these missing libraries by using .lib and .dll stubs
