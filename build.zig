@@ -14,7 +14,6 @@ pub fn build(b: *std.Build) !void {
         .name = "example",
         .target = target,
         .optimize = optimize,
-        .link_libc = true,
         .root_source_file = .{ .path = "examples/0_simple/main.zig" },
     });
     try link("Kinc", exe, options);
@@ -91,6 +90,7 @@ pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile
 
 // Link Kinc to a compile step & and kinc's include directory
 pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options: KmakeOptions) !void {
+    c.linkLibCpp();
     const allocator = c.root_module.owner.allocator;
     const modulePathAbsolute = try std.fs.cwd().realpathAlloc(allocator, modulePath);
     // set up Kinc
