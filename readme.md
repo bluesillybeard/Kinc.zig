@@ -4,8 +4,14 @@ Kinc for Zig.
 
 Right now there are no bindings; this simply provides an easier way to link Kinc with your project.
 
+Also, cross compilation is not supported. You can try it, but don't expect it to work.
+
 Supported platforms:
 - Linux (compiled from Linux)
+- Windows (compiled from Windows)
+- Macos might work, but I don't have a mac to test it.
+
+In the future, I plan on supporting every platform that Kinc supports.
 
 I am fruitlessly trying to get Windows builds to work, but Windows is just inherently a difficult platform to work with. On Linux, it "just works", but the windows build just refuses to work.
 
@@ -28,19 +34,6 @@ kinc.link("Kinc.zig/Kinc", exe);
 ```
 that will statically link kinc into your project, and it adds kinc's include paths as well.
 
-Kinc creates its own Main method so it can initialize things before the user's program begins.
-That means you can't use the regular Zig entrypoint, you need to do this instead:
-```
-// Tell zig to find main elsewhere
-pub extern fn main(argc: c_int, argv: [*c][*c]const u8) callconv(.C) c_int;
-
-// Export so the linker can find it (instead of it accidentally being linked in the compiler or something)
-export fn kickstart(argc: c_int, argv: [*c][*c]const u8) callconv(.C) c_int {
-    // code goes here
-    return 0; //return non-zero on error
-}
-```
-
 4. When you add shaders, in your build.zig:
 
 ```zig
@@ -56,21 +49,14 @@ Compile time depencies:
 - any compile-time dependencies of Kinc (which depends heavily on your target platform)
 
 How it works:
-1. Call Kinc's make system to get JSON data of how to build it
-2. use that information to add include directories, link system libraries, and add C sources to add Kinc.
+1. call Kmake to create a static library of Kinc
+    - This is why cross compilation doesn't work - Kmake doesn't do cross-compilation well.
+2. link with that static lib
+3. compile shaders with krafix
 
 TODO:
 - Lots of TODOS in `build.zig`
 - actual bindings instead of just linking it
 - return a module (or whatever that ends up being called in the future) instead of adding the files to a given compile step.
     - Better to do this after bindings are created
-- test building on Windows
-    - test cross-compilation to Linux. It should work, since X11 libs are linked using libdl instead of as part of the ELF.
-        - asound and udev might cause issues if they aren't part of Zig's cross-compile toolkit
-        - Look into if libdl is really required, since it should be part of glibc now
-- get cross-compilation from Linux to Windows working
-    - dxguid is missing
-    - winhttp is missing
-    - strmiids is missing
-    - wbemuuid is missing
-    - It might be possible to fix these missing libraries by using .lib and .dll stubs
+

@@ -90,19 +90,19 @@ pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile
 
 // Link Kinc to a compile step & and kinc's include directory
 pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options: KmakeOptions) !void {
+    // Note: Kinc doesn't need the full C++ library in certain configurations, however it's easiest to always link it
     c.linkLibCpp();
     const allocator = c.root_module.owner.allocator;
+    // Path to kinc (not Kinc.zig)
     const modulePathAbsolute = try std.fs.cwd().realpathAlloc(allocator, modulePath);
     // set up Kinc
-    // TODO: run the bat on Windows
-
     defer allocator.free(modulePathAbsolute);
     {
         var child = blk: {
             if (builtin.os.tag == .windows) {
                 break :blk std.process.Child.init(&[_][]const u8{"get_dlc"}, allocator);
             } else {
-                // TODO: see if the Windows code works on Posix as well. (skipping the bash argument and going straight to running the file)
+                // TODO: see if the Windows code works on Posix as well. (skipping bash and going straight to running the file)
                 break :blk std.process.Child.init(&[_][]const u8{ "bash", "get_dlc" }, allocator);
             }
         };
@@ -113,58 +113,22 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
             std.debug.print("get_dlc failed! {any}\n", .{res});
         }
     }
-    // Call Kinc's build system to get information on how to build it.
-    const buildInfoJson = blk: {
-        var args = try std.ArrayList([]const u8).initCapacity(c.root_module.owner.allocator, 20);
-        if (builtin.os.tag == .windows) {
-            try args.append("make");
-        } else {
-            // TODO: see if bash is nessisary on posix systems
-            try args.append("bash");
-            try args.append("make");
-        }
-        try args.append("--json");
-        // // Tell it to use the clang compiler, in case there are compiler-specific defines or something
-        try args.append("--compiler");
-        try args.append("clang");
-        try args.append("--target");
-        try args.append(getKmakeTargetString(c.rootModuleTarget(), options.platform));
-        try args.append("--arch");
-        try args.append(getKmakeArchitectureString(c.rootModuleTarget()));
-        if (c.root_module.optimize == null or c.root_module.optimize.? == .Debug) {
-            try args.append("--debug");
-        }
-        // TODO: graphics and audio options
-        // For now, only vulkan is allowed to be used
-        try args.append("--graphics");
-        try args.append("vulkan");
-        std.debug.print("Kmake options: {s}\n", .{args.items});
-        var child = std.process.Child.init(try args.toOwnedSlice(), allocator);
-        child.cwd = modulePathAbsolute;
-        child.stdout_behavior = .Pipe;
-        child.stderr_behavior = .Pipe;
-        var stdout = std.ArrayList(u8).init(allocator);
-        defer stdout.deinit();
-        var stderr = std.ArrayList(u8).init(allocator);
-        defer stderr.deinit();
-        try child.spawn();
-        try child.collectOutput(&stdout, &stderr, std.math.maxInt(usize));
-        const res = try child.wait();
-        // TODO: make sure it exited successfuly
-        if (res != .Exited or res.Exited != 0) {
-            std.debug.print("get_dlc failed! {any}\n", .{res});
-            std.debug.print("{s}\n", .{stdout.items});
-            std.debug.print("{s}\n", .{stderr.items});
-        }
-        // Read in the file it created
-        // It has an option to print the json to stdout, but it mixes it with logs so it's basically useless
-        const file = try std.fs.openFileAbsolute(try std.fmt.allocPrint(allocator, "{s}/build/Kinc.json", .{modulePathAbsolute}), .{});
-        break :blk try file.readToEndAlloc(allocator, std.math.maxInt(usize));
-    };
-    // print the JSON it returned
-    try std.io.getStdOut().writer().print("{s}\n", .{buildInfoJson});
-    // parse the json it returned
-    const buildInfoParsed = try std.json.parseFromSlice(BuildInfo, allocator, buildInfoJson, .{
+    // Call Kinc's build system to make the static library
+    try runKmake(c, options, modulePathAbsolute, false);
+
+    // Link with the static library
+    // TODO: I believe it will be Kinc.lib on Windows
+    c.addObjectFile(.{.path = try std.fmt.allocPrint(allocator, "{s}/Deployment/Kinc.a", .{modulePathAbsolute})});
+
+    // Call it again to get json info - this is used for include directories
+    try runKmake(c, options, modulePathAbsolute, true);
+
+    // Read in the file it created
+    // It has an option to print the json to stdout, but it mixes it with logs so it's basically useless
+    const file = try std.fs.openFileAbsolute(try std.fmt.allocPrint(allocator, "{s}/build/Kinc.json", .{modulePathAbsolute}), .{});
+    const jsonText = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
+
+    const buildInfoParsed = try std.json.parseFromSlice(BuildInfo, allocator, jsonText, .{
         .allocate = .alloc_always,
         .duplicate_field_behavior = .@"error",
         .ignore_unknown_fields = true,
@@ -173,41 +137,21 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
     defer buildInfoParsed.deinit();
     const buildInfo = buildInfoParsed.value;
 
-    // Buid the flags for the compilation into c
-    var flags = try std.ArrayList([]const u8).initCapacity(allocator, buildInfo.includes.len * 2 + buildInfo.libraries.len * 2 + buildInfo.defines.len * 2);
-    defer flags.deinit();
-
-    for (buildInfo.defines) |define| {
-        try flags.append("-D");
-        try flags.append(define);
+    for (buildInfo.includes) |include| {
+        const path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ modulePathAbsolute, include });
+        c.addIncludePath(.{ .path = path });
     }
 
     // TODO: look into whether it would be worth adding the option to link libraries statically.
     for (buildInfo.libraries) |library| {
         c.linkSystemLibrary2(library, .{
-            .needed = true,
             // pkg-config doesn't know what to do with some of the libs
+            // For example, the 'udev' library wouldn't be linked correctly using pkg-config
             .use_pkg_config = .no,
         });
     }
+    // TODO: frameworks on macos
 
-    for (buildInfo.includes) |include| {
-        const path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ modulePathAbsolute, include });
-        c.addIncludePath(.{ .path = path });
-    }
-    var files = try std.ArrayList([]const u8).initCapacity(allocator, buildInfo.files.len);
-    defer files.deinit();
-    for (buildInfo.files) |file| {
-        // filter out files we don't care about
-        if (std.mem.endsWith(u8, file, ".c") or std.mem.endsWith(u8, file, ".cpp")) {
-            // The files are relative to Kinc, not Kinc.zig so add that part of the path
-            try files.append(try std.fmt.allocPrint(allocator, "Kinc/{s}", .{file}));
-        }
-    }
-    c.addCSourceFiles(.{
-        .files = files.items,
-        .flags = flags.items,
-    });
 }
 
 // Kinc's build info will parse into this struct
@@ -217,6 +161,56 @@ pub const BuildInfo = struct {
     defines: []const []const u8,
     files: []const []const u8,
 };
+
+fn runKmake(c: *std.Build.Step.Compile, options: KmakeOptions, modulePathAbsolute: []const u8, json: bool) !void {
+    const allocator = c.root_module.owner.allocator;
+    var args = try std.ArrayList([]const u8).initCapacity(c.root_module.owner.allocator, 20);
+    if (builtin.os.tag == .windows) {
+        try args.append("make");
+    } else {
+        // TODO: see if bash is nessisary on posix systems
+        try args.append("bash");
+        try args.append("make");
+    }
+    if(json){
+       try args.append("--json") ;
+    } else {
+        try args.append("--compile");
+        try args.append("--lib");
+    }
+    
+    // forward target
+    try args.append("--target");
+    try args.append(getKmakeTargetString(c.rootModuleTarget(), options.platform));
+    try args.append("--arch");
+    try args.append(getKmakeArchitectureString(c.rootModuleTarget()));
+    // forward debug
+    if (c.root_module.optimize == null or c.root_module.optimize.? == .Debug) {
+        try args.append("--debug");
+    }
+    // TODO: graphics and audio options
+    // For now, only vulkan is allowed to be used
+    try args.append("--graphics");
+    try args.append("vulkan");
+
+    std.debug.print("Kmake options: {s}\n", .{args.items});
+    var child = std.process.Child.init(try args.toOwnedSlice(), allocator);
+    child.cwd = modulePathAbsolute;
+    child.stdout_behavior = .Pipe;
+    child.stderr_behavior = .Pipe;
+    var stdout = std.ArrayList(u8).init(allocator);
+    defer stdout.deinit();
+    var stderr = std.ArrayList(u8).init(allocator);
+    defer stderr.deinit();
+    try child.spawn();
+    try child.collectOutput(&stdout, &stderr, std.math.maxInt(usize));
+    const res = try child.wait();
+    if (res != .Exited or res.Exited != 0) {
+        std.debug.print("Kmake failed! {any}\n\n", .{res});
+        std.debug.print("Stdout:\n{s}\n\n", .{stdout.items});
+        std.debug.print("Stderr: {s}\n\n", .{stderr.items});
+    }
+}
 
 fn guessKmakeTargetStringFromTarget(target: std.Target) []const u8 {
     // TODO: switch on compatible platforms too

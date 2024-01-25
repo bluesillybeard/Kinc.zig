@@ -11,7 +11,6 @@ const c = @cImport({
     @cInclude("kinc/graphics4/pipeline.h");
     @cInclude("kinc/graphics4/shader.h");
     @cInclude("kinc/graphics4/vertexbuffer.h");
-    @cInclude("kinc/io/filereader.h");
     @cInclude("kinc/system.h");
 });
 
@@ -45,14 +44,7 @@ fn update(_data: ?*anyopaque) callconv(.C) void {
     _ = c.kinc_g4_swap_buffers();
 }
 
-// Tell zig to find main elsewhere
-pub extern fn main(argc: c_int, argv: [*c][*c]const u8) callconv(.C) c_int;
-
-// Export so the LLVM linker can find it (instead of it accidentally being linked before LLVM can find it)
-export fn kickstart(argc: c_int, argv: [*c][*c]const u8) callconv(.C) c_int {
-    _ = argc;
-    _ = argv;
-
+pub fn main() void {
     var vertex_shader: c.kinc_g4_shader_t = .{};
     var fragment_shader: c.kinc_g4_shader_t = .{};
     var data: Data = .{
@@ -98,5 +90,4 @@ export fn kickstart(argc: c_int, argv: [*c][*c]const u8) callconv(.C) c_int {
     }
 
     c.kinc_start();
-    return 0;
 }
