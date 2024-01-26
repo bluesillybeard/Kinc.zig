@@ -117,8 +117,8 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
     try runKmake(c, options, modulePathAbsolute, false);
 
     // Link with the static library
-    // TODO: I believe it will be Kinc.lib on Windows
-    c.addObjectFile(.{.path = try std.fmt.allocPrint(allocator, "{s}/Deployment/Kinc.a", .{modulePathAbsolute})});
+    const staticLibPostfix = if (c.rootModuleTarget().os.tag == .windows) ".lib" else ".a";
+    c.addObjectFile(.{ .path = try std.fmt.allocPrint(allocator, "{s}/Deployment/Kinc{s}", .{ modulePathAbsolute, staticLibPostfix }) });
 
     // Call it again to get json info - this is used for include directories
     try runKmake(c, options, modulePathAbsolute, true);
@@ -138,7 +138,10 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
     const buildInfo = buildInfoParsed.value;
 
     for (buildInfo.includes) |include| {
-        const path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ modulePathAbsolute, include });
+        const path =
+        if(std.fs.path.isAbsolute(include)) include
+        else try std.fmt.allocPrint(allocator, "{s}/{s}", .{ modulePathAbsolute, include });
+        
         c.addIncludePath(.{ .path = path });
     }
 
@@ -162,6 +165,11 @@ pub const BuildInfo = struct {
     files: []const []const u8,
 };
 
+const KmakeError = error{
+    // TODO: makre errors more specific if possible
+    kmakeError,
+};
+
 fn runKmake(c: *std.Build.Step.Compile, options: KmakeOptions, modulePathAbsolute: []const u8, json: bool) !void {
     const allocator = c.root_module.owner.allocator;
     var args = try std.ArrayList([]const u8).initCapacity(c.root_module.owner.allocator, 20);
@@ -172,13 +180,13 @@ fn runKmake(c: *std.Build.Step.Compile, options: KmakeOptions, modulePathAbsolut
         try args.append("bash");
         try args.append("make");
     }
-    if(json){
-       try args.append("--json") ;
+    if (json) {
+        try args.append("--json");
     } else {
         try args.append("--compile");
         try args.append("--lib");
     }
-    
+
     // forward target
     try args.append("--target");
     try args.append(getKmakeTargetString(c.rootModuleTarget(), options.platform));
@@ -209,6 +217,7 @@ fn runKmake(c: *std.Build.Step.Compile, options: KmakeOptions, modulePathAbsolut
         std.debug.print("Kmake failed! {any}\n\n", .{res});
         std.debug.print("Stdout:\n{s}\n\n", .{stdout.items});
         std.debug.print("Stderr: {s}\n\n", .{stderr.items});
+        return KmakeError.kmakeError;
     }
 }
 
