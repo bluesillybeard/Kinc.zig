@@ -92,7 +92,7 @@ pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile
         defer stdout.deinit();
         var stderr = std.ArrayList(u8).init(allocator);
         defer stderr.deinit();
-        child.collectOutput(stdout, stderr,std.math.maxInt(usize));
+        try child.collectOutput(&stdout, &stderr,std.math.maxInt(usize));
         std.debug.print("Krafix failed to compiler shader {s}!\nstdout:\n{s}\n\nstderr:\n{s}\n\n", .{sourceFile, stdout.items, stderr.items});
     }
 }

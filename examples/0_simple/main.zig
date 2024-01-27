@@ -14,15 +14,6 @@ const c = @cImport({
     @cInclude("kinc/system.h");
 });
 
-// The original code worked something like this,
-// However this is a terrible way to do it and very un-ziglike, so it's done a different way
-
-// var vertex_shader: c.kinc_g4_shader_t = .{};
-// var fragment_shader: c.kinc_g4_shader_t = .{};
-// var pipeline: c.kinc_g4_pipeline_t = .{};
-// var vertices: c.kinc_g4_vertex_buffer_t = .{};
-// var indices: c.kinc_g4_index_buffer_t = .{};
-
 // This is the data that persists throughout the application
 const Data = struct {
     pipeline: c.kinc_g4_pipeline_t,

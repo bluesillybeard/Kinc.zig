@@ -13,8 +13,6 @@ Supported platforms:
 
 In the future, I plan on supporting every platform that Kinc supports.
 
-I am fruitlessly trying to get Windows builds to work, but Windows is just inherently a difficult platform to work with. On Linux, it "just works", but the windows build just refuses to work.
-
 1. Add this as a submodule
     - `git submodule add https://github.com/bluesillybeard/Kinc.zig.git`
     - Technically the library could work if it's not a git submodule, but that is not a use case I will enthusiastically support. In other words, you're pretty much on your own if you refuse to use Git.
