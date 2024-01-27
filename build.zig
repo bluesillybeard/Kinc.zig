@@ -84,8 +84,17 @@ pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile
     std.debug.print("Krafix arguments: {s}\n", .{args});
     var child = std.process.Child.init(&args, allocator);
     child.cwd = modulePathAbsolute;
-    // TODO: verify it ran successfully
-    _ = try child.spawnAndWait();
+    child.stdout_behavior = .Pipe;
+    child.stderr_behavior = .Pipe;
+    const term = try child.spawnAndWait();
+    if(term != .Exited or term.Exited != 0) {
+        var stdout = std.ArrayList(u8).init(allocator);
+        defer stdout.deinit();
+        var stderr = std.ArrayList(u8).init(allocator);
+        defer stderr.deinit();
+        child.collectOutput(stdout, stderr,std.math.maxInt(usize));
+        std.debug.print("Krafix failed to compiler shader {s}!\nstdout:\n{s}\n\nstderr:\n{s}\n\n", .{sourceFile, stdout.items, stderr.items});
+    }
 }
 
 // Link Kinc to a compile step & and kinc's include directory
