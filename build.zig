@@ -90,7 +90,10 @@ pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile
 
 // Link Kinc to a compile step & and kinc's include directory
 pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options: KmakeOptions) !void {
-    // TODO: Windows build only works when the ABI is msvc
+    // Windows build only works when the ABI is msvc
+    if(c.rootModuleTarget().os.tag == .windows and c.rootModuleTarget().abi != .msvc) {
+        @panic("Windows build only works with MSVC abi");
+    }
 
     c.linkLibC();
     const allocator = c.root_module.owner.allocator;
@@ -121,26 +124,7 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
     if(c.rootModuleTarget().os.tag != .windows){
         c.addObjectFile(.{ .path = try std.fmt.allocPrint(allocator, "{s}/Deployment/Kinc.a", .{ modulePathAbsolute }) });
     } else {
-        // I thought DLL hell was bad.
-        // Turns out, there's something worse: static library hell
-        // Like, holy crap! Developing for windows is a hot mess and a half! and I here thought Linux had it bad.
-        // TODO: If these libs are stable, look into just copying them into the git repo and not dealing with the insanity.
         c.addObjectFile(.{ .path = try std.fmt.allocPrint(allocator, "{s}/Deployment/Kinc.lib", .{ modulePathAbsolute }) });
-        // Side note: Why doesn't kink just add the dependencies to itself?
-        // TODO: detect Windows SDK installation and architecture instead of hard-coding the path
-        // Windows SDK - Kinc requries uuid.lib from this
-        c.addLibraryPath(.{.cwd_relative = "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.19041.0/um/x64"});
-        // TODO: detect Microsoft Visual Studio installation and architecture instead of hard-coding the path
-        // Visual studio - Kinc requires libcmtd.lib and oldnames.lib from this
-        c.addLibraryPath(.{.cwd_relative = "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.36.32532/lib/x64"});
-        // TODO: libcmtd.lib defines __guard_check_icall_fptr and __guard_dispatch_icall_fptr, which clash with symbols of the same name in mingwex.lib
-        // I have no idea how to fix this. Genuinely. No clue. I'm stuck. I straight up cannot get the windows build working for the life of me.
-        // This is going to destroy my very soul and leave me as nothing but an empty shell of a body mindlessly performing daily tasks to stay alive.
-
-        // Things I have tried:
-        // c.root_module.stack_check = false;
-        // c.root_module.stack_protector = false;
-        // c.root_module.omit_frame_pointer = true;
     }
     
 
@@ -177,15 +161,15 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
             .use_pkg_config = .no,
         });
     }
-    // TODO: figure out why it doesn't link with Vulkan with MSVC
     if(c.rootModuleTarget().abi == .msvc){
         // Windows is freaking stupid and dumb and it needs to die in a hole
         // Reason one: it's not vulkan.dll, it's vulkan-1.dll
         // Reason two: system libraries don't exist. Everything is in its own weird directory and it's just a big mess
-        // TODO: replace hard-coded path with configuration option and automatic search
-        c.addLibraryPath(.{.cwd_relative = "C:/VulkanSDK/1.3.275.0/Lib"});
+        const VkSdk = std.process.getEnvVarOwned(allocator, "VULKAN_SDK") catch @panic("Vulkan SDK not found!");
+        defer allocator.free(VkSdk);
+        c.addLibraryPath(.{.cwd_relative = try std.fmt.allocPrint(allocator, "{s}/Lib", .{VkSdk})});
         c.linkSystemLibrary2("vulkan-1", .{});
-        // Kinc.lib asks to link these libraries. The request is ignored.
+        // Kinc.lib has these libraries listed, but Zig ignores them so they are listed here.
         c.linkSystemLibrary2("kernel32", .{});
         c.linkSystemLibrary2("user32", .{});
         c.linkSystemLibrary2("gdi32", .{});
@@ -197,7 +181,6 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
         c.linkSystemLibrary2("uuid", .{});
         c.linkSystemLibrary2("odbc32", .{});
         c.linkSystemLibrary2("odbccp32", .{});
-        //.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies
     }
     // TODO: frameworks on macos
 
