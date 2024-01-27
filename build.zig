@@ -136,7 +136,10 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
         // I have no idea how to fix this. Genuinely. No clue. I'm stuck. I straight up cannot get the windows build working for the life of me.
         // This is going to destroy my very soul and leave me as nothing but an empty shell of a body mindlessly performing daily tasks to stay alive.
 
-
+        // Things I have tried:
+        // c.root_module.stack_check = false;
+        // c.root_module.stack_protector = false;
+        // c.root_module.omit_frame_pointer = true;
     }
     
 
