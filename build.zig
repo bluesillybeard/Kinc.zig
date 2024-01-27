@@ -90,8 +90,9 @@ pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile
 
 // Link Kinc to a compile step & and kinc's include directory
 pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options: KmakeOptions) !void {
-    // Note: Kinc doesn't need the full C++ library in certain configurations, however it's easiest to always link it
-    c.linkLibCpp();
+    // TODO: Windows build only works when the ABI is msvc
+
+    c.linkLibC();
     const allocator = c.root_module.owner.allocator;
     // Path to kinc (not Kinc.zig)
     const modulePathAbsolute = try std.fs.cwd().realpathAlloc(allocator, modulePath);
@@ -175,6 +176,28 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
             // For example, the 'udev' library wouldn't be linked correctly using pkg-config
             .use_pkg_config = .no,
         });
+    }
+    // TODO: figure out why it doesn't link with Vulkan with MSVC
+    if(c.rootModuleTarget().abi == .msvc){
+        // Windows is freaking stupid and dumb and it needs to die in a hole
+        // Reason one: it's not vulkan.dll, it's vulkan-1.dll
+        // Reason two: system libraries don't exist. Everything is in its own weird directory and it's just a big mess
+        // TODO: replace hard-coded path with configuration option and automatic search
+        c.addLibraryPath(.{.cwd_relative = "C:/VulkanSDK/1.3.275.0/Lib"});
+        c.linkSystemLibrary2("vulkan-1", .{});
+        // Kinc.lib asks to link these libraries. The request is ignored.
+        c.linkSystemLibrary2("kernel32", .{});
+        c.linkSystemLibrary2("user32", .{});
+        c.linkSystemLibrary2("gdi32", .{});
+        c.linkSystemLibrary2("winspool", .{});
+        c.linkSystemLibrary2("advapi32", .{});
+        c.linkSystemLibrary2("shell32", .{});
+        c.linkSystemLibrary2("ole32", .{});
+        c.linkSystemLibrary2("oleaut32", .{});
+        c.linkSystemLibrary2("uuid", .{});
+        c.linkSystemLibrary2("odbc32", .{});
+        c.linkSystemLibrary2("odbccp32", .{});
+        //.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies
     }
     // TODO: frameworks on macos
 
