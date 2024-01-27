@@ -117,8 +117,28 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
     try runKmake(c, options, modulePathAbsolute, false);
 
     // Link with the static library
-    const staticLibPostfix = if (c.rootModuleTarget().os.tag == .windows) ".lib" else ".a";
-    c.addObjectFile(.{ .path = try std.fmt.allocPrint(allocator, "{s}/Deployment/Kinc{s}", .{ modulePathAbsolute, staticLibPostfix }) });
+    if(c.rootModuleTarget().os.tag != .windows){
+        c.addObjectFile(.{ .path = try std.fmt.allocPrint(allocator, "{s}/Deployment/Kinc.a", .{ modulePathAbsolute }) });
+    } else {
+        // I thought DLL hell was bad.
+        // Turns out, there's something worse: static library hell
+        // Like, holy crap! Developing for windows is a hot mess and a half! and I here thought Linux had it bad.
+        // TODO: If these libs are stable, look into just copying them into the git repo and not dealing with the insanity.
+        c.addObjectFile(.{ .path = try std.fmt.allocPrint(allocator, "{s}/Deployment/Kinc.lib", .{ modulePathAbsolute }) });
+        // Side note: Why doesn't kink just add the dependencies to itself?
+        // TODO: detect Windows SDK installation and architecture instead of hard-coding the path
+        // Windows SDK - Kinc requries uuid.lib from this
+        c.addLibraryPath(.{.cwd_relative = "C:/Program Files (x86)/Windows Kits/10/Lib/10.0.19041.0/um/x64"});
+        // TODO: detect Microsoft Visual Studio installation and architecture instead of hard-coding the path
+        // Visual studio - Kinc requires libcmtd.lib and oldnames.lib from this
+        c.addLibraryPath(.{.cwd_relative = "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.36.32532/lib/x64"});
+        // TODO: libcmtd.lib defines __guard_check_icall_fptr and __guard_dispatch_icall_fptr, which clash with symbols of the same name in mingwex.lib
+        // I have no idea how to fix this. Genuinely. No clue. I'm stuck. I straight up cannot get the windows build working for the life of me.
+        // This is going to destroy my very soul and leave me as nothing but an empty shell of a body mindlessly performing daily tasks to stay alive.
+
+
+    }
+    
 
     // Call it again to get json info - this is used for include directories
     try runKmake(c, options, modulePathAbsolute, true);
@@ -138,11 +158,11 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
     const buildInfo = buildInfoParsed.value;
 
     for (buildInfo.includes) |include| {
-        const path =
-        if(std.fs.path.isAbsolute(include)) include
-        else try std.fmt.allocPrint(allocator, "{s}/{s}", .{ modulePathAbsolute, include });
-        
-        c.addIncludePath(.{ .path = path });
+        if(std.fs.path.isAbsolute(include)) {
+            c.addIncludePath(.{.cwd_relative = include});
+        } else {
+            c.addIncludePath(.{.path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ modulePathAbsolute, include })});
+        }
     }
 
     // TODO: look into whether it would be worth adding the option to link libraries statically.
