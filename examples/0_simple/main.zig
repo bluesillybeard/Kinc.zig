@@ -4,7 +4,6 @@
 
 const std = @import("std");
 
-// TODO: see if usingnamespace works or not
 const c = @cImport({
     @cInclude("kinc/graphics4/graphics.h");
     @cInclude("kinc/graphics4/indexbuffer.h");
