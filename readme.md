@@ -11,7 +11,7 @@ Supported platforms:
 - Windows (compiled from Windows)
 - Macos might work, but I don't have a mac to test it.
 
-In the future, I plan on supporting every platform that Kinc supports.
+In the future, I plan on supporting every platform that Kinc supports. However, I value my time and will not spend much of it on this project. As such, pull requests are greatly appreciated!
 
 1. Add this as a submodule
     - `git submodule add https://github.com/bluesillybeard/Kinc.zig.git`
