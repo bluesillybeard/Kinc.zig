@@ -17,6 +17,7 @@ In the future, I plan on supporting every platform that Kinc supports. However, 
     - `git submodule add https://github.com/bluesillybeard/Kinc.zig.git`
     - Technically the library could work if it's not a git submodule, but that is not a use case I will enthusiastically support. In other words, you're pretty much on your own if you refuse to use Git.
 2. Make sure Kinc itself is loaded
+    - `cd Kinc.zig`
     - `git submodule update --depth 1 --init Kinc`
 
 - I reccomend putting the second step into some kind of script that people are supposed to run upon cloning your repository

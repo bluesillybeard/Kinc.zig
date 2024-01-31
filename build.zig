@@ -40,6 +40,7 @@ pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile
     std.fs.cwd().makePath(destinationPath) catch |e| if (e != error.PathAlreadyExists) return e;
     const destinationFileAbsolute = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ cwdPath, destinationFile });
     const modulePathAbsolute = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ cwdPath, modulePath });
+    std.debug.print("Kinc module path: {s}\n", .{modulePathAbsolute});
     // Figure out which krafix to use
     const krafixPath = switch (builtin.os.tag) {
         .linux => switch (builtin.cpu.arch) {
@@ -86,14 +87,15 @@ pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile
     child.cwd = modulePathAbsolute;
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Pipe;
-    const term = try child.spawnAndWait();
+    try child.spawn();
+    var stdout = std.ArrayList(u8).init(allocator);
+    defer stdout.deinit();
+    var stderr = std.ArrayList(u8).init(allocator);
+    defer stderr.deinit();
+    try child.collectOutput(&stdout, &stderr,std.math.maxInt(usize));
+    const term = try child.wait();
     if(term != .Exited or term.Exited != 0) {
-        var stdout = std.ArrayList(u8).init(allocator);
-        defer stdout.deinit();
-        var stderr = std.ArrayList(u8).init(allocator);
-        defer stderr.deinit();
-        try child.collectOutput(&stdout, &stderr,std.math.maxInt(usize));
-        std.debug.print("Krafix failed to compiler shader {s}!\nstdout:\n{s}\n\nstderr:\n{s}\n\n", .{sourceFile, stdout.items, stderr.items});
+        std.debug.print("Krafix failed to compile shader {s}!\nstdout:\n{s}\n\nstderr:\n{s}\n\n", .{sourceFile, stdout.items, stderr.items});
     }
 }
 
@@ -300,7 +302,7 @@ fn getKmakeArchitectureString(target: std.Target) []const u8 {
 }
 
 pub const KmakeOptions = struct {
-    platform: KmakePlatform,
+    platform: KmakePlatform = .guess,
 };
 
 pub const KmakePlatform = enum {
