@@ -92,18 +92,18 @@ pub fn compileShader(comptime modulePath: []const u8, c: *std.Build.Step.Compile
     defer stdout.deinit();
     var stderr = std.ArrayList(u8).init(allocator);
     defer stderr.deinit();
-    try child.collectOutput(&stdout, &stderr,std.math.maxInt(usize));
+    try child.collectOutput(&stdout, &stderr, std.math.maxInt(usize));
     const term = try child.wait();
-    if(term != .Exited or term.Exited != 0) {
-        std.debug.print("Krafix failed to compile shader {s}!\nstdout:\n{s}\n\nstderr:\n{s}\n\n", .{sourceFile, stdout.items, stderr.items});
+    if (term != .Exited or term.Exited != 0) {
+        std.debug.print("Krafix failed to compile shader {s}!\nstdout:\n{s}\n\nstderr:\n{s}\n\n", .{ sourceFile, stdout.items, stderr.items });
     }
 }
 
 // Link Kinc to a compile step & and kinc's include directory
 pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options: KmakeOptions) !void {
     // Windows build only works when the ABI is msvc
-    if(c.rootModuleTarget().os.tag == .windows and c.rootModuleTarget().abi != .msvc) {
-        @panic("Windows build only works with MSVC abi");
+    if (c.rootModuleTarget().os.tag == .windows and c.rootModuleTarget().abi != .msvc and !(c.root_module.owner.option(bool, "nodumbabicheck", "skip the ABI check for windows build") orelse false)) {
+        @panic("Windows build only works with MSVC abi. Pass '-Dnodumbabicheck=true' to bypass this restriction.");
     }
 
     c.linkLibC();
@@ -132,12 +132,11 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
     try runKmake(c, options, modulePathAbsolute, false);
 
     // Link with the static library
-    if(c.rootModuleTarget().os.tag != .windows){
-        c.addObjectFile(.{ .path = try std.fmt.allocPrint(allocator, "{s}/Deployment/Kinc.a", .{ modulePathAbsolute }) });
+    if (c.rootModuleTarget().os.tag != .windows) {
+        c.addObjectFile(.{ .path = try std.fmt.allocPrint(allocator, "{s}/Deployment/Kinc.a", .{modulePathAbsolute}) });
     } else {
-        c.addObjectFile(.{ .path = try std.fmt.allocPrint(allocator, "{s}/Deployment/Kinc.lib", .{ modulePathAbsolute }) });
+        c.addObjectFile(.{ .path = try std.fmt.allocPrint(allocator, "{s}/Deployment/Kinc.lib", .{modulePathAbsolute}) });
     }
-    
 
     // Call it again to get json info - this is used for include directories
     try runKmake(c, options, modulePathAbsolute, true);
@@ -157,10 +156,10 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
     const buildInfo = buildInfoParsed.value;
 
     for (buildInfo.includes) |include| {
-        if(std.fs.path.isAbsolute(include)) {
-            c.addIncludePath(.{.cwd_relative = include});
+        if (std.fs.path.isAbsolute(include)) {
+            c.addIncludePath(.{ .cwd_relative = include });
         } else {
-            c.addIncludePath(.{.path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ modulePathAbsolute, include })});
+            c.addIncludePath(.{ .path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ modulePathAbsolute, include }) });
         }
     }
 
@@ -172,13 +171,13 @@ pub fn link(comptime modulePath: []const u8, c: *std.Build.Step.Compile, options
             .use_pkg_config = .no,
         });
     }
-    if(c.rootModuleTarget().abi == .msvc){
+    if (c.rootModuleTarget().abi == .msvc) {
         // Windows is freaking stupid and dumb and it needs to die in a hole
         // Reason one: it's not vulkan.dll, it's vulkan-1.dll
         // Reason two: system libraries don't exist. Everything is in its own weird directory and it's just a big mess
         const VkSdk = std.process.getEnvVarOwned(allocator, "VULKAN_SDK") catch @panic("Vulkan SDK not found!");
         defer allocator.free(VkSdk);
-        c.addLibraryPath(.{.cwd_relative = try std.fmt.allocPrint(allocator, "{s}/Lib", .{VkSdk})});
+        c.addLibraryPath(.{ .cwd_relative = try std.fmt.allocPrint(allocator, "{s}/Lib", .{VkSdk}) });
         c.linkSystemLibrary2("vulkan-1", .{});
         // Kinc.lib has these libraries listed, but Zig ignores them so they are listed here.
         c.linkSystemLibrary2("kernel32", .{});
